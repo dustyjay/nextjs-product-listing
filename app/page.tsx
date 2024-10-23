@@ -1,109 +1,98 @@
 'use client';
 
-import CartModal, { CartItemType } from '@/components/cart-modal';
+import CartModal from '@/app/partials/cart-modal';
 import CategoryList from '@/components/category-list';
 import ListingItem, { ListingItemType } from '@/components/listing-item';
-import ListingItemModal from '@/components/listing-item-modal';
+import ListingItemModal from '@/app/partials/listing-item-modal';
 import {
   fetchCategories,
   fetchCategoryListing,
   fetchListing
 } from '@/services/product-listing.service';
-import { SORT_VALUES, sortListing, SortValueType } from '@/services/sort-listing.service';
-import Head from 'next/head';
+import {
+  getFilteredListings,
+  getListingCount,
+  SORT_VALUES,
+  SortValueType
+} from '@/services/sort-listing.service';
+import { RootState } from '@/store';
+import {
+  setActiveCategory,
+  setCategories,
+  setFilters,
+  setListings,
+  setSelectedListing,
+  setShowCartModal,
+  updateListingCount
+} from '@/store/listing.store';
 import Image from 'next/image';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 
 export default function Home() {
-  const [listings, setListings] = useState<ListingItemType[]>([]);
-  const [categories, setCategories] = useState<string[]>(['All']);
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [activeSort, setActiveSort] = useState<SortValueType>('');
-  const [cart, setCart] = useState<CartItemType[]>([]);
-  const [selectedListing, setSelectedListing] = useState<CartItemType>();
-  const [showCartModal, setShowCartModal] = useState(false);
-  const [searchVal, setSearchValue] = useState('');
+  const dispatch = useDispatch();
+
+  const categories = useSelector((state: RootState) => state.listing.categories);
+  const cart = useSelector((state: RootState) => state.listing.cart);
+  const selectedListing = useSelector((state: RootState) => state.listing.selectedListing);
+  const filters = useSelector((state: RootState) => state.listing.filters);
+  const activeCategory = useSelector((state: RootState) => state.listing.activeCategory);
+  const showCartModal = useSelector((state: RootState) => state.listing.showCartModal);
+  const filteredListings = useSelector(getFilteredListings);
+
   const [showFilters, setShowFilters] = useState(false);
+  const [showPageError, setShowPageError] = useState(false);
+  const [categoryError, setCategoryError] = useState(false);
 
   useEffect(() => {
     getCategories();
     getListing();
   }, []);
 
-  const filteredListings = useMemo(() => {
-    let filtered = [...listings];
-
-    if (searchVal) {
-      const search = searchVal.toLowerCase();
-
-      filtered = listings.filter(
-        (l) => l.title.toLowerCase().includes(search) || l.category.toLowerCase().includes(search)
-      );
-    }
-
-    return sortListing(activeSort, filtered);
-  }, [listings, searchVal, activeSort]);
-
   const getListing = async () => {
-    const listingRes = await fetchListing();
-    setListings(listingRes);
+    try {
+      setShowPageError(false);
+      const listingRes = await fetchListing();
+      dispatch(setListings(listingRes));
+    } catch (error) {
+      setShowPageError(true);
+    }
   };
 
   const getCategories = async () => {
-    const categoryRes = await fetchCategories();
-    setCategories(['All', ...categoryRes]);
+    try {
+      setCategoryError(false);
+      const categoryRes = await fetchCategories();
+      dispatch(setCategories(['All', ...categoryRes]));
+    } catch (error) {
+      setCategoryError(true);
+    }
   };
 
   const handleCategorySelect = async (category: string) => {
     if (category === activeCategory) return;
 
-    setActiveCategory(category);
+    dispatch(setActiveCategory(category));
     if (category === 'All') {
       getListing();
     } else {
-      const listingRes = await fetchCategoryListing(category);
-      const sortedListings = sortListing(activeSort, listingRes);
-
-      setListings(sortedListings);
+      try {
+        setShowPageError(false);
+        const listingRes = await fetchCategoryListing(category);
+        dispatch(setListings(listingRes));
+      } catch (error) {
+        setShowPageError(true);
+      }
     }
   };
 
   const handleListingClick = (listing: ListingItemType) => {
-    const cartCount = getListingCount(listing.id);
-    setSelectedListing({ ...listing, cartCount });
-  };
-
-  const getListingCount = (listingId: number) => {
-    const cartItem = cart.find((c) => c.id === listingId);
-
-    return !!cartItem ? cartItem.cartCount : 0;
-  };
-
-  const updateListingCount = (listing: ListingItemType, cartCount: number) => {
-    if (cartCount === 0) {
-      setCart((c) => c.filter((cartItem) => cartItem.id !== listing.id));
-      return;
-    }
-
-    const cartItemIndex = cart.findIndex((c) => c.id === listing.id);
-
-    const newCart =
-      cartItemIndex <= -1
-        ? [...cart, { ...listing, cartCount }]
-        : cart.map((cartItem) => {
-            if (cartItem.id === listing.id) return { ...cartItem, cartCount };
-            return cartItem;
-          });
-
-    setCart(newCart);
+    const cartCount = getListingCount(cart, listing.id);
+    dispatch(setSelectedListing({ ...listing, cartCount }));
   };
 
   return (
     <Fragment>
-      <Head>
-        <title>Product Listing</title>
-        <meta name='description' content='Product listing with NextJS 13' />
-      </Head>
       <header className='p-8 max-w-[1280px] mx-auto sticky top-0 bg-white'>
         <div className='flex gap-4 justify-between mb-6'>
           <Image src='/farmily.svg' alt='Home' width={100} height={24} priority />
@@ -113,7 +102,9 @@ export default function Home() {
                 Show filters
               </button>
             )}
-            <button className='flex items-center gap-1' onClick={() => setShowCartModal(true)}>
+            <button
+              className='flex items-center gap-1'
+              onClick={() => dispatch(setShowCartModal(true))}>
               🛒 Cart
               {cart.length > 0 && (
                 <span className='inline-flex items-center justify-center w-5 h-5 text-xs bg-red-500 text-white rounded-full'>
@@ -128,8 +119,10 @@ export default function Home() {
             <div className='flex gap-3'>
               <select
                 className='bg-transparent'
-                value={activeSort}
-                onChange={(e) => setActiveSort(e.target.value as SortValueType)}>
+                value={filters.sort}
+                onChange={(e) =>
+                  dispatch(setFilters({ ...filters, sort: e.target.value as SortValueType }))
+                }>
                 {SORT_VALUES.map((item) => (
                   <option value={item.value} key={item.value}>
                     {item.title}
@@ -139,8 +132,8 @@ export default function Home() {
               <input
                 placeholder='Search for products'
                 type='search'
-                value={searchVal}
-                onChange={(e) => setSearchValue(e.target.value)}
+                value={filters.search}
+                onChange={(e) => dispatch(setFilters({ ...filters, search: e.target.value }))}
               />
             </div>
             <button onClick={() => setShowFilters(false)} className='text-xs underline'>
@@ -148,22 +141,41 @@ export default function Home() {
             </button>
           </div>
         )}
-        <CategoryList
-          categories={categories}
-          activeCategory={activeCategory}
-          onSelect={handleCategorySelect}
-        />
+        {categoryError ? (
+          <p className='bg-red-50 rounded-lg px-2 py-1 border border-red-300 inline-block text-xs'>
+            We encountered an error fetching categories. Contact support
+          </p>
+        ) : (
+          <CategoryList
+            categories={categories}
+            activeCategory={activeCategory}
+            onSelect={handleCategorySelect}
+          />
+        )}
       </header>
 
       <main className='px-8 pt-4 mb-12 max-w-[1280px] mx-auto'>
-        {filteredListings.length === 0 && searchVal ? (
+        {showPageError ? (
           <div className='flex flex-col items-center justify-center text-center mt-[10vh] gap-6'>
             <p>
-              No products match your search <i>{searchVal}</i>.<br /> Try using a different word
+              We encountered an error fetching the product listings. If issue persists, contact
+              support
+            </p>
+            <button
+              onClick={() => location.reload()}
+              className='w-[200px] bg-orange-50 border border-orange-400 rounded-2xl py-3'>
+              Reload page
+            </button>
+          </div>
+        ) : filteredListings.length === 0 && filters.search ? (
+          <div className='flex flex-col items-center justify-center text-center mt-[10vh] gap-6'>
+            <p>
+              No products match your search <i>{filters.search}</i>.<br /> Try using a different
+              word
               {activeCategory !== 'All' ? ' or category' : ''}
             </p>
             <button
-              onClick={() => setSearchValue('')}
+              onClick={() => dispatch(setFilters({ ...filters, search: '' }))}
               className='w-[200px] bg-orange-50 border border-orange-400 rounded-2xl py-3'>
               Clear search
             </button>
@@ -174,31 +186,18 @@ export default function Home() {
               <ListingItem
                 key={listing.id}
                 {...listing}
-                cartCount={getListingCount(listing.id)}
+                cartCount={getListingCount(cart, listing.id)}
                 onClick={() => handleListingClick(listing)}
-                onCountChange={(count) => updateListingCount(listing, count)}
+                onCountChange={(cartCount) => dispatch(updateListingCount({ listing, cartCount }))}
               />
             ))}
           </ul>
         )}
       </main>
 
-      {!!selectedListing && (
-        <ListingItemModal
-          {...selectedListing}
-          cartCount={getListingCount(selectedListing.id)}
-          onCountChange={(count) => updateListingCount(selectedListing, count)}
-          onClose={() => setSelectedListing(undefined)}
-        />
-      )}
+      {!!selectedListing && <ListingItemModal />}
 
-      {showCartModal && (
-        <CartModal
-          cartItems={cart}
-          onUpdate={updateListingCount}
-          onClose={() => setShowCartModal(false)}
-        />
-      )}
+      {showCartModal && <CartModal />}
     </Fragment>
   );
 }

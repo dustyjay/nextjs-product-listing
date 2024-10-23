@@ -22,17 +22,7 @@ type Props = ListingItemType & {
   onClick: () => void;
 };
 
-const ListingItem = ({
-  title,
-  price,
-  category,
-  description,
-  image,
-  rating,
-  cartCount,
-  onClick,
-  onCountChange
-}: Props) => {
+const ListingItem = ({ title, price, image, rating, cartCount, onClick, onCountChange }: Props) => {
   return (
     <li
       className='shadow-md rounded-xl flex flex-col px-3 py-2'

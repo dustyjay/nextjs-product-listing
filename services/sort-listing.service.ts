@@ -1,4 +1,6 @@
+import { CartItemType } from '@/app/partials/cart-modal';
 import { ListingItemType } from '@/components/listing-item';
+import { RootState } from '@/store';
 
 export type SortValueType = '' | 'rating' | 'alphabetically' | 'lowest-price' | 'highest-price';
 
@@ -25,6 +27,7 @@ export const SORT_VALUES: { title: string; value: SortValueType }[] = [
   }
 ];
 
+// util functions
 export const sortListing = (sortKey: SortValueType, listings: ListingItemType[]) => {
   if (sortKey === 'alphabetically') {
     return listings.sort(function (a, b) {
@@ -77,7 +80,38 @@ export const sortListing = (sortKey: SortValueType, listings: ListingItemType[])
   return listings;
 };
 
-const handleSortListing = (listings: ListingItemType[], sort: SortValueType) => {
-  const _listings = [...listings];
-  return sortListing(sort, _listings);
+export const getListingCount = (cart: CartItemType[], listingId: number) => {
+  const cartItem = cart.find((c) => c.id === listingId);
+
+  return !!cartItem ? cartItem.cartCount : 0;
+};
+
+// State getter functions
+export const getFilteredListings = (state: RootState) => {
+  const {
+    listing: { filters, listings }
+  } = state;
+
+  let filtered = [...listings];
+
+  if (filters.search) {
+    const search = filters.search.toLowerCase();
+
+    filtered = listings.filter(
+      (l) => l.title.toLowerCase().includes(search) || l.category.toLowerCase().includes(search)
+    );
+  }
+
+  return sortListing(filters.sort, filtered);
+};
+
+export const getTotalCartAmount = (state: RootState) => {
+  const {
+    listing: { cart }
+  } = state;
+
+  return cart.reduce((acc, item) => {
+    const itemTotal = item.price * item.cartCount;
+    return acc + itemTotal;
+  }, 0);
 };
